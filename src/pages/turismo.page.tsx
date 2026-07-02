@@ -19,7 +19,7 @@ import {
   useMap,
 } from "@vis.gl/react-google-maps";
 import { ElOroProvinceBoundary } from "@/components/turismo-province-boundary";
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
 const FILTER_OPTIONS = [
   "Todos",
@@ -165,27 +165,30 @@ function PlaceCard({
   return (
     <button
       type="button"
-      className={`turismo-card${isSelected ? " turismo-card--selected" : ""}`}
+      className={`turismo-card turismo-card--compact${isSelected ? " turismo-card--selected" : ""}`}
       onClick={onSelect}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
     >
+      <div className="turismo-card-body">
+        <div className="turismo-card-title-row">
+          <h3 className="turismo-card-title">{place.name}</h3>
+          <span className="turismo-card-rating">
+            <StarIcon />
+            {place.rating.toFixed(2)}
+          </span>
+        </div>
+        <p className="turismo-card-meta">
+          {place.category} · {place.distanceKm} km
+        </p>
+        <p className="turismo-card-meta">
+          {place.reviewCount} reseñas · {place.priceLabel}
+        </p>
+        {isNew ? <span className="turismo-card-new-tag">Nuevo</span> : null}
+      </div>
       <div className="turismo-card-image-wrap">
         <img src={place.photos[0] ?? DEFAULT_PHOTO} alt={place.name} loading="lazy" />
-        <span className="turismo-card-badge">{place.category}</span>
-        {isNew ? <span className="turismo-card-badge turismo-card-badge--new">Nuevo</span> : null}
-        <span className="turismo-card-price">{place.priceLabel}</span>
       </div>
-      <div className="turismo-card-title-row">
-        <h3 className="turismo-card-title">{place.name}</h3>
-        <span className="turismo-card-rating">
-          <StarIcon />
-          {place.rating.toFixed(2)}
-        </span>
-      </div>
-      <p className="turismo-card-meta">
-        {place.distanceKm} km · {place.reviewCount} reseñas
-      </p>
     </button>
   );
 }
@@ -528,90 +531,144 @@ function AddPlaceModal({ open, coords, onClose, onChangeLocation, onSubmit }: Ad
   );
 }
 
-const PlaceDetail = forwardRef<
-  HTMLElement,
-  {
-    place: TurismoPlace;
-    onAddReview: (review: Omit<TurismoReview, "id" | "date" | "avatar">) => Promise<void>;
-    isSubmittingReview?: boolean;
-  }
->(function PlaceDetail({ place, onAddReview, isSubmittingReview }, ref) {
+function PlaceDetail({
+  place,
+  onClose,
+  onAddReview,
+  isSubmittingReview,
+}: {
+  place: TurismoPlace;
+  onClose: () => void;
+  onAddReview: (review: Omit<TurismoReview, "id" | "date" | "avatar">) => Promise<void>;
+  isSubmittingReview?: boolean;
+}) {
+  const [activeTab, setActiveTab] = useState<"descripcion" | "galeria" | "comentarios">("descripcion");
   const mainPhoto = place.photos[0] ?? DEFAULT_PHOTO;
-  const sidePhotos = place.photos.slice(1, 3);
+  const allPhotos = place.photos.length > 0 ? place.photos : [DEFAULT_PHOTO];
+
+  useEffect(() => {
+    setActiveTab("descripcion");
+  }, [place.id]);
 
   return (
     <section
-      ref={ref}
-      className="turismo-detail"
+      className="turismo-detail turismo-detail--panel"
       aria-label={`Detalle de ${place.name}`}
     >
-      <div className="turismo-detail-gallery">
-        <img src={mainPhoto} alt={place.name} />
-        {sidePhotos.length > 0 ? (
-          <div className="turismo-detail-gallery-side">
-            {sidePhotos.map((photo) => (
-              <img key={photo} src={photo} alt="" />
-            ))}
+      <div className="turismo-detail-hero">
+        <img className="turismo-detail-hero-img" src={mainPhoto} alt={place.name} />
+        <button
+          type="button"
+          className="turismo-detail-close"
+          onClick={onClose}
+          aria-label="Cerrar detalle"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="turismo-detail-content">
+        <div className="turismo-detail-header">
+          <h2>{place.name}</h2>
+        </div>
+
+        <div className="turismo-detail-tabs" role="tablist" aria-label="Secciones del lugar">
+          {(
+            [
+              { id: "descripcion", label: "Descripción" },
+              { id: "galeria", label: "Galería" },
+              { id: "comentarios", label: "Comentarios" },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              className={`turismo-detail-tab${activeTab === tab.id ? " turismo-detail-tab--active" : ""}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "descripcion" ? (
+          <div className="turismo-detail-tab-panel" role="tabpanel">
+            <div className="turismo-detail-meta">
+              <span className="turismo-card-rating">
+                <StarIcon />
+                {place.reviewCount > 0 ? place.rating.toFixed(2) : "Sin reseñas"} · {place.reviewCount}{" "}
+                reseñas
+              </span>
+              <span>{place.category}</span>
+              <span>{place.direccion ?? `${place.distanceKm} km del centro`}</span>
+              <span>{place.priceLabel}</span>
+            </div>
+
+            {place.highlights.length > 0 ? (
+              <div className="turismo-highlights">
+                {place.highlights.map((item) => (
+                  <span key={item} className="turismo-highlight">
+                    {item}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            <p className="turismo-detail-desc">{place.description}</p>
+          </div>
+        ) : null}
+
+        {activeTab === "galeria" ? (
+          <div className="turismo-detail-tab-panel" role="tabpanel">
+            <div className="turismo-gallery-grid">
+              {allPhotos.map((photo, index) => (
+                <img
+                  key={`${photo}-${index}`}
+                  src={photo}
+                  alt={index === 0 ? place.name : `${place.name} foto ${index + 1}`}
+                  loading="lazy"
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {activeTab === "comentarios" ? (
+          <div className="turismo-detail-tab-panel" role="tabpanel">
+            {place.reviews.length === 0 ? (
+              <p className="turismo-detail-empty">Aún no hay comentarios. Sé el primero.</p>
+            ) : (
+              place.reviews.map((review) => (
+                <article key={review.id} className="turismo-review">
+                  <img
+                    className="turismo-review-avatar"
+                    src={review.avatar}
+                    alt={review.author}
+                  />
+                  <div>
+                    <div className="turismo-review-head">
+                      <span className="turismo-review-author">{review.author}</span>
+                      <span className="turismo-card-rating">
+                        <StarIcon />
+                        {review.rating}
+                      </span>
+                      <span className="turismo-review-date">{review.date}</span>
+                    </div>
+                    <p className="turismo-review-text">{review.comment}</p>
+                  </div>
+                </article>
+              ))
+            )}
+
+            <AddReviewForm onSubmit={onAddReview} isSubmitting={isSubmittingReview} />
           </div>
         ) : null}
       </div>
-
-      <div className="turismo-detail-header">
-        <h2>{place.name}</h2>
-        <div className="turismo-detail-meta">
-          <span className="turismo-card-rating">
-            <StarIcon />
-            {place.reviewCount > 0 ? place.rating.toFixed(2) : "Sin reseñas"} · {place.reviewCount}{" "}
-            reseñas
-          </span>
-          <span>{place.category}</span>
-          <span>{place.direccion ?? `${place.distanceKm} km del centro`}</span>
-          <span>{place.priceLabel}</span>
-        </div>
-      </div>
-
-      {place.highlights.length > 0 ? (
-        <div className="turismo-highlights">
-          {place.highlights.map((item) => (
-            <span key={item} className="turismo-highlight">
-              {item}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
-      <p className="turismo-detail-desc">{place.description}</p>
-
-      <h3 className="turismo-reviews-title">Comentarios de visitantes</h3>
-      {place.reviews.length === 0 ? (
-        <p style={{ color: "#717171", marginBottom: 8 }}>Aún no hay comentarios. Sé el primero.</p>
-      ) : (
-        place.reviews.map((review) => (
-          <article key={review.id} className="turismo-review">
-            <img
-              className="turismo-review-avatar"
-              src={review.avatar}
-              alt={review.author}
-            />
-            <div>
-              <div className="turismo-review-head">
-                <span className="turismo-review-author">{review.author}</span>
-                <span className="turismo-card-rating">
-                  <StarIcon />
-                  {review.rating}
-                </span>
-                <span className="turismo-review-date">{review.date}</span>
-              </div>
-              <p className="turismo-review-text">{review.comment}</p>
-            </div>
-          </article>
-        ))
-      )}
-
-      <AddReviewForm onSubmit={onAddReview} isSubmitting={isSubmittingReview} />
     </section>
   );
-});
+}
 
 export const TurismoPage = () => {
   const mapsKey = import.meta.env.VITE_GOOGLE_MAPS_KEY as string | undefined;
@@ -631,8 +688,6 @@ export const TurismoPage = () => {
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const detailRef = useRef<HTMLElement>(null);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -643,7 +698,6 @@ export const TurismoPage = () => {
         const lugares = await listarLugares();
         if (cancelled) return;
         setPlaces(lugares);
-        setSelectedId((prev) => prev ?? lugares[0]?.id ?? null);
       } catch (err) {
         if (!cancelled) {
           setLoadError(err instanceof Error ? err.message : "No se pudieron cargar los lugares.");
@@ -746,9 +800,10 @@ export const TurismoPage = () => {
 
   const handleSelectPlace = (id: string) => {
     setSelectedId(id);
-    requestAnimationFrame(() => {
-      detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+  };
+
+  const handleCloseDetail = () => {
+    setSelectedId(null);
   };
 
   const handleAddPlace = async (payload: CreatePlacePayload) => {
@@ -757,9 +812,6 @@ export const TurismoPage = () => {
     setUserAddedIds((prev) => new Set(prev).add(created.id));
     setSelectedId(created.id);
     cancelPickFlow();
-    requestAnimationFrame(() => {
-      detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
   };
 
   const handleAddReview = async (
@@ -815,7 +867,8 @@ export const TurismoPage = () => {
       </header>
 
       <div className="turismo-body">
-        <div className="turismo-list-panel">
+        <div className="turismo-drawer">
+          <div className="turismo-list-panel">
           <div className="turismo-list-header">
             <div className="turismo-list-header-row">
               <div>
@@ -872,16 +925,19 @@ export const TurismoPage = () => {
                 : "No hay lugares que coincidan con tu búsqueda."}
             </p>
           ) : null}
+          </div>
+        </div>
 
-          {selectedPlace && filteredPlaces.some((p) => p.id === selectedPlace.id) ? (
+        {selectedPlace && filteredPlaces.some((p) => p.id === selectedPlace.id) ? (
+          <div className="turismo-detail-panel">
             <PlaceDetail
-              ref={detailRef}
               place={selectedPlace}
+              onClose={handleCloseDetail}
               onAddReview={(review) => handleAddReview(selectedPlace.id, review)}
               isSubmittingReview={isSubmittingReview || isLoadingDetail}
             />
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         <aside className={`turismo-map-panel${pickMode ? " turismo-map-panel--picking" : ""}`}>
           {!mapsKey ? (
