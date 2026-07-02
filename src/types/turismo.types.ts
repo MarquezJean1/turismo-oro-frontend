@@ -1,3 +1,8 @@
+export type TurismoPhoto = {
+  id: string;
+  url: string;
+};
+
 export type TurismoReview = {
   id: string;
   author: string;
@@ -19,7 +24,7 @@ export type TurismoPlace = {
   reviewCount: number;
   distanceKm: number;
   description: string;
-  photos: string[];
+  photos: TurismoPhoto[];
   reviews: TurismoReview[];
   highlights: string[];
 };
@@ -30,6 +35,15 @@ export type CreatePlacePayload = {
   lat: number;
   lng: number;
   direccion: string;
+  priceLabel: string;
+  description: string;
+  highlights: string[];
+  images: File[];
+};
+
+export type UpdatePlacePayload = {
+  name: string;
+  category: string;
   priceLabel: string;
   description: string;
   highlights: string[];

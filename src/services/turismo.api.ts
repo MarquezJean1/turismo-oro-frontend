@@ -3,8 +3,10 @@ import {
   TURISMO_MAP_CENTER,
   type CreatePlacePayload,
   type CreateReviewPayload,
+  type TurismoPhoto,
   type TurismoPlace,
   type TurismoReview,
+  type UpdatePlacePayload,
 } from "@/types/turismo.types";
 
 function resolveApiBase(): string {
@@ -35,7 +37,7 @@ type ApiTurismoDetail = ApiTurismoListItem & {
   direccion?: string;
   description: string;
   highlights: string[];
-  photos: string[];
+  photos: Array<{ id: string; url: string } | string>;
   reviews: Array<{
     id: string;
     author: string;
@@ -77,6 +79,13 @@ function mapReview(review: ApiTurismoDetail["reviews"][number]): TurismoReview {
   };
 }
 
+function mapPhoto(photo: { id: string; url: string } | string, index: number): TurismoPhoto {
+  if (typeof photo === "string") {
+    return { id: `legacy-${index}`, url: resolvePhotoUrl(photo) };
+  }
+  return { id: photo.id, url: resolvePhotoUrl(photo.url) };
+}
+
 function mapListItem(item: ApiTurismoListItem): TurismoPlace {
   return {
     id: item.id,
@@ -89,7 +98,7 @@ function mapListItem(item: ApiTurismoListItem): TurismoPlace {
     reviewCount: item.reviewCount,
     distanceKm: distanceKmFromCenter(Number(item.lat), Number(item.lng)),
     description: "",
-    photos: item.photo ? [resolvePhotoUrl(item.photo)] : [DEFAULT_PHOTO],
+    photos: item.photo ? [{ id: "", url: resolvePhotoUrl(item.photo) }] : [{ id: "", url: DEFAULT_PHOTO }],
     highlights: [],
     reviews: [],
   };
@@ -97,10 +106,10 @@ function mapListItem(item: ApiTurismoListItem): TurismoPlace {
 
 function mapDetail(item: ApiTurismoDetail): TurismoPlace {
   const photos = item.photos?.length
-    ? item.photos.map(resolvePhotoUrl)
+    ? item.photos.map(mapPhoto)
     : item.photo
-      ? [resolvePhotoUrl(item.photo)]
-      : [DEFAULT_PHOTO];
+      ? [{ id: "", url: resolvePhotoUrl(item.photo) }]
+      : [{ id: "", url: DEFAULT_PHOTO }];
 
   return {
     id: item.id,
@@ -182,6 +191,34 @@ export async function crearLugar(payload: CreatePlacePayload, token?: string | n
   return mapDetail(data);
 }
 
+export async function actualizarLugar(
+  lugarId: string,
+  payload: UpdatePlacePayload,
+  token: string,
+): Promise<TurismoPlace> {
+  const form = new FormData();
+  form.append("Nombre", payload.name);
+  form.append("Categoria", payload.category);
+  form.append("EtiquetaPrecio", payload.priceLabel);
+  form.append("Descripcion", payload.description);
+  form.append("Destacados", payload.highlights.join(", "));
+
+  for (const imagen of payload.images) {
+    form.append("Imagenes", imagen);
+  }
+
+  const response = await fetch(`${API_BASE}/api/turismo/${lugarId}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+
+  if (!response.ok) throw new Error(await parseError(response));
+
+  const data = (await response.json()) as ApiTurismoDetail;
+  return mapDetail(data);
+}
+
 export async function agregarComentario(
   lugarId: string,
   payload: CreateReviewPayload,
@@ -200,6 +237,31 @@ export async function agregarComentario(
 
   const data = (await response.json()) as ApiTurismoDetail["reviews"][number];
   return mapReview(data);
+}
+
+export async function eliminarLugar(lugarId: string, token: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/turismo/${lugarId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) throw new Error(await parseError(response));
+}
+
+export async function eliminarFoto(
+  lugarId: string,
+  archivoId: string,
+  token: string,
+): Promise<TurismoPlace> {
+  const response = await fetch(`${API_BASE}/api/turismo/${lugarId}/fotos/${archivoId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) throw new Error(await parseError(response));
+
+  const data = (await response.json()) as ApiTurismoDetail;
+  return mapDetail(data);
 }
 
 export { API_BASE };

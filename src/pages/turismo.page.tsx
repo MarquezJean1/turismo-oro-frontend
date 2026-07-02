@@ -5,10 +5,14 @@ import {
   type CreatePlacePayload,
   type TurismoPlace,
   type TurismoReview,
+  type UpdatePlacePayload,
 } from "@/types/turismo.types";
 import {
   agregarComentario,
+  actualizarLugar,
   crearLugar,
+  eliminarFoto,
+  eliminarLugar,
   listarLugares,
   obtenerLugar,
 } from "@/services/turismo.api";
@@ -31,6 +35,10 @@ import { ElOroProvinceBoundary } from "@/components/turismo-province-boundary";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from "react";
 
 const DEFAULT_PRIMARY_COLOR = "#ff385c";
+
+function getCoverPhoto(place: TurismoPlace) {
+  return place.photos[0]?.url ?? DEFAULT_PHOTO;
+}
 
 function darkenHex(hex: string, amount = 0.14): string {
   const normalized = hex.trim().replace("#", "");
@@ -209,7 +217,7 @@ function PlaceCard({
         {isNew ? <span className="turismo-card-new-tag">Nuevo</span> : null}
       </div>
       <div className="turismo-card-image-wrap">
-        <img src={place.photos[0] ?? DEFAULT_PHOTO} alt={place.name} loading="lazy" />
+        <img src={getCoverPhoto(place)} alt={place.name} loading="lazy" />
       </div>
     </button>
   );
@@ -553,6 +561,196 @@ function AddPlaceModal({ open, coords, onClose, onChangeLocation, onSubmit }: Ad
   );
 }
 
+type EditPlaceModalProps = {
+  open: boolean;
+  place: TurismoPlace | null;
+  onClose: () => void;
+  onSubmit: (payload: UpdatePlacePayload) => Promise<void>;
+};
+
+function EditPlaceModal({ open, place, onClose, onSubmit }: EditPlaceModalProps) {
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState<string>(CATEGORY_OPTIONS[0]);
+  const [priceLabel, setPriceLabel] = useState("Gratis");
+  const [description, setDescription] = useState("");
+  const [highlights, setHighlights] = useState("");
+  const [imagenes, setImagenes] = useState<File[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const currentPhotoCount = place?.photos.filter((photo) => photo.id).length ?? 0;
+  const remainingSlots = Math.max(0, MAX_IMAGENES - currentPhotoCount);
+
+  useEffect(() => {
+    if (!open || !place) return;
+
+    setName(place.name);
+    setCategory(place.category);
+    setPriceLabel(place.priceLabel);
+    setDescription(place.description);
+    setHighlights(place.highlights.join(", "));
+    setImagenes([]);
+    setError(null);
+    setIsSubmitting(false);
+  }, [open, place]);
+
+  if (!open || !place) return null;
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !description.trim() || isSubmitting) return;
+
+    if (imagenes.length > remainingSlots) {
+      setError(`Solo puedes agregar ${remainingSlots} imagen(es) más.`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      await onSubmit({
+        name: name.trim(),
+        category,
+        priceLabel: priceLabel.trim() || "Gratis",
+        description: description.trim(),
+        highlights: highlights
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        images: imagenes,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo actualizar el lugar.");
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleImagenesChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > remainingSlots) {
+      setError(`Solo puedes agregar ${remainingSlots} imagen(es) más.`);
+      setImagenes(files.slice(0, remainingSlots));
+      return;
+    }
+    setError(null);
+    setImagenes(files);
+  };
+
+  return (
+    <div className="turismo-modal-overlay" onClick={onClose} role="presentation">
+      <div
+        className="turismo-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-place-title"
+      >
+        <div className="turismo-modal-header">
+          <h2 id="edit-place-title">Editar lugar turístico</h2>
+          <button type="button" className="turismo-modal-close" onClick={onClose} aria-label="Cerrar">
+            ×
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="turismo-form-field">
+            <label htmlFor="edit-place-name">Nombre</label>
+            <input
+              id="edit-place-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="turismo-form-row">
+            <div className="turismo-form-field">
+              <label htmlFor="edit-place-category">Categoría</label>
+              <select
+                id="edit-place-category"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                {CATEGORY_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="turismo-form-field">
+              <label htmlFor="edit-place-price">Precio / entrada</label>
+              <input
+                id="edit-place-price"
+                value={priceLabel}
+                onChange={(e) => setPriceLabel(e.target.value)}
+                placeholder="Ej. Gratis"
+              />
+            </div>
+          </div>
+
+          <div className="turismo-form-field">
+            <label htmlFor="edit-place-description">Descripción</label>
+            <textarea
+              id="edit-place-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="turismo-form-field">
+            <label htmlFor="edit-place-highlights">Destacados (separados por coma)</label>
+            <input
+              id="edit-place-highlights"
+              value={highlights}
+              onChange={(e) => setHighlights(e.target.value)}
+              placeholder="Ej. Gastronomía, Artesanías, Familias"
+            />
+          </div>
+
+          {remainingSlots > 0 ? (
+            <div className="turismo-form-field">
+              <label htmlFor="edit-place-photos">
+                Agregar fotos (opcional, {currentPhotoCount}/{MAX_IMAGENES} usadas)
+              </label>
+              <input
+                id="edit-place-photos"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                multiple
+                onChange={handleImagenesChange}
+              />
+              {imagenes.length > 0 ? (
+                <p className="turismo-form-hint">{imagenes.length} imagen(es) seleccionada(s)</p>
+              ) : null}
+            </div>
+          ) : (
+            <p className="turismo-form-hint">Este lugar ya tiene el máximo de {MAX_IMAGENES} fotos.</p>
+          )}
+
+          <div className="turismo-form-actions">
+            <button type="button" className="turismo-form-btn" onClick={onClose} disabled={isSubmitting}>
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="turismo-form-btn turismo-form-btn--primary"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Guardando..." : "Guardar cambios"}
+            </button>
+          </div>
+          {error ? <p className="turismo-form-error">{error}</p> : null}
+        </form>
+      </div>
+    </div>
+  );
+}
+
 type LoginModalProps = {
   open: boolean;
   onClose: () => void;
@@ -653,19 +851,53 @@ function PlaceDetail({
   onClose,
   onAddReview,
   isSubmittingReview,
+  isAdmin,
+  onEdit,
+  onDeletePlace,
+  onDeletePhoto,
 }: {
   place: TurismoPlace;
   onClose: () => void;
   onAddReview: (review: Omit<TurismoReview, "id" | "date" | "avatar">) => Promise<void>;
   isSubmittingReview?: boolean;
+  isAdmin?: boolean;
+  onEdit?: () => void;
+  onDeletePlace?: () => Promise<void>;
+  onDeletePhoto?: (photoId: string) => Promise<void>;
 }) {
   const [activeTab, setActiveTab] = useState<"descripcion" | "galeria" | "comentarios">("descripcion");
-  const mainPhoto = place.photos[0] ?? DEFAULT_PHOTO;
-  const allPhotos = place.photos.length > 0 ? place.photos : [DEFAULT_PHOTO];
+  const [isDeletingPlace, setIsDeletingPlace] = useState(false);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
+  const mainPhoto = getCoverPhoto(place);
+  const galleryPhotos = place.photos.length > 0 ? place.photos : [{ id: "", url: DEFAULT_PHOTO }];
 
   useEffect(() => {
     setActiveTab("descripcion");
   }, [place.id]);
+
+  const handleDeletePlace = async () => {
+    if (!onDeletePlace || isDeletingPlace) return;
+    if (!window.confirm("¿Eliminar este lugar turístico?")) return;
+
+    setIsDeletingPlace(true);
+    try {
+      await onDeletePlace();
+    } finally {
+      setIsDeletingPlace(false);
+    }
+  };
+
+  const handleDeletePhoto = async (photoId: string) => {
+    if (!onDeletePhoto || !photoId || deletingPhotoId) return;
+    if (!window.confirm("¿Eliminar esta foto?")) return;
+
+    setDeletingPhotoId(photoId);
+    try {
+      await onDeletePhoto(photoId);
+    } finally {
+      setDeletingPhotoId(null);
+    }
+  };
 
   return (
     <section
@@ -734,19 +966,51 @@ function PlaceDetail({
             ) : null}
 
             <p className="turismo-detail-desc">{place.description}</p>
+
+            {isAdmin ? (
+              <div className="turismo-detail-admin-actions">
+                {onEdit ? (
+                  <button type="button" className="turismo-edit-btn" onClick={onEdit}>
+                    Editar lugar
+                  </button>
+                ) : null}
+                {onDeletePlace ? (
+                  <button
+                    type="button"
+                    className="turismo-delete-btn"
+                    onClick={() => void handleDeletePlace()}
+                    disabled={isDeletingPlace}
+                  >
+                    {isDeletingPlace ? "Eliminando..." : "Eliminar lugar"}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
         {activeTab === "galeria" ? (
           <div className="turismo-detail-tab-panel" role="tabpanel">
             <div className="turismo-gallery-grid">
-              {allPhotos.map((photo, index) => (
-                <img
-                  key={`${photo}-${index}`}
-                  src={photo}
-                  alt={index === 0 ? place.name : `${place.name} foto ${index + 1}`}
-                  loading="lazy"
-                />
+              {galleryPhotos.map((photo, index) => (
+                <div key={photo.id || `${photo.url}-${index}`} className="turismo-gallery-item">
+                  <img
+                    src={photo.url}
+                    alt={index === 0 ? place.name : `${place.name} foto ${index + 1}`}
+                    loading="lazy"
+                  />
+                  {isAdmin && photo.id && onDeletePhoto ? (
+                    <button
+                      type="button"
+                      className="turismo-gallery-delete"
+                      onClick={() => void handleDeletePhoto(photo.id)}
+                      disabled={deletingPhotoId === photo.id}
+                      aria-label={`Eliminar foto ${index + 1}`}
+                    >
+                      {deletingPhotoId === photo.id ? "..." : "×"}
+                    </button>
+                  ) : null}
+                </div>
               ))}
             </div>
           </div>
@@ -806,6 +1070,7 @@ export const TurismoPage = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [editPlace, setEditPlace] = useState<TurismoPlace | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [themeColor, setThemeColor] = useState(DEFAULT_PRIMARY_COLOR);
@@ -1037,6 +1302,26 @@ export const TurismoPage = () => {
     }
   };
 
+  const handleDeletePlace = async (placeId: string) => {
+    if (!authSession) return;
+    await eliminarLugar(placeId, authSession.token);
+    setPlaces((prev) => prev.filter((place) => place.id !== placeId));
+    setSelectedId(null);
+  };
+
+  const handleDeletePhoto = async (placeId: string, photoId: string) => {
+    if (!authSession) return;
+    const updated = await eliminarFoto(placeId, photoId, authSession.token);
+    setPlaces((prev) => prev.map((place) => (place.id === placeId ? updated : place)));
+  };
+
+  const handleUpdatePlace = async (payload: UpdatePlacePayload) => {
+    if (!authSession || !editPlace) return;
+    const updated = await actualizarLugar(editPlace.id, payload, authSession.token);
+    setPlaces((prev) => prev.map((place) => (place.id === updated.id ? updated : place)));
+    setEditPlace(null);
+  };
+
   return (
     <div className="turismo-page" style={themeStyle}>
       <header className="turismo-header">
@@ -1175,6 +1460,10 @@ export const TurismoPage = () => {
               onClose={handleCloseDetail}
               onAddReview={(review) => handleAddReview(selectedPlace.id, review)}
               isSubmittingReview={isSubmittingReview || isLoadingDetail}
+              isAdmin={!!authSession}
+              onEdit={authSession ? () => setEditPlace(selectedPlace) : undefined}
+              onDeletePlace={() => handleDeletePlace(selectedPlace.id)}
+              onDeletePhoto={(photoId) => handleDeletePhoto(selectedPlace.id, photoId)}
             />
           </div>
         ) : null}
@@ -1229,6 +1518,13 @@ export const TurismoPage = () => {
         onClose={cancelPickFlow}
         onChangeLocation={handleChangeLocation}
         onSubmit={handleAddPlace}
+      />
+
+      <EditPlaceModal
+        open={!!editPlace}
+        place={editPlace}
+        onClose={() => setEditPlace(null)}
+        onSubmit={handleUpdatePlace}
       />
 
       <LoginModal
