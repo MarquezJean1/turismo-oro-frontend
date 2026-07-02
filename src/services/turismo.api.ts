@@ -152,7 +152,7 @@ export async function obtenerLugar(id: string): Promise<TurismoPlace> {
   return mapDetail(data);
 }
 
-export async function crearLugar(payload: CreatePlacePayload): Promise<TurismoPlace> {
+export async function crearLugar(payload: CreatePlacePayload, token?: string | null): Promise<TurismoPlace> {
   const form = new FormData();
   form.append("Nombre", payload.name);
   form.append("Categoria", payload.category);
@@ -167,8 +167,12 @@ export async function crearLugar(payload: CreatePlacePayload): Promise<TurismoPl
     form.append("Imagenes", imagen);
   }
 
+  const headers: HeadersInit = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   const response = await fetch(`${API_BASE}/api/turismo`, {
     method: "POST",
+    headers,
     body: form,
   });
 

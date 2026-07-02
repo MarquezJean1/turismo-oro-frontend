@@ -13,13 +13,35 @@ import {
   obtenerLugar,
 } from "@/services/turismo.api";
 import {
+  actualizarColor,
+  cerrarSesion,
+  getStoredSession,
+  iniciarSesion,
+  obtenerColorTema,
+  obtenerSesion,
+  type AuthSession,
+} from "@/services/auth.api";
+import {
   AdvancedMarker,
   APIProvider,
   Map,
   useMap,
 } from "@vis.gl/react-google-maps";
 import { ElOroProvinceBoundary } from "@/components/turismo-province-boundary";
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from "react";
+
+const DEFAULT_PRIMARY_COLOR = "#ff385c";
+
+function darkenHex(hex: string, amount = 0.14): string {
+  const normalized = hex.trim().replace("#", "");
+  if (normalized.length !== 6) return hex;
+  const num = parseInt(normalized, 16);
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  const r = clamp(((num >> 16) & 0xff) * (1 - amount));
+  const g = clamp(((num >> 8) & 0xff) * (1 - amount));
+  const b = clamp((num & 0xff) * (1 - amount));
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
 
 const FILTER_OPTIONS = [
   "Todos",
@@ -531,6 +553,101 @@ function AddPlaceModal({ open, coords, onClose, onChangeLocation, onSubmit }: Ad
   );
 }
 
+type LoginModalProps = {
+  open: boolean;
+  onClose: () => void;
+  onLogin: (usuario: string, password: string) => Promise<void>;
+  isSubmitting?: boolean;
+};
+
+function LoginModal({ open, onClose, onLogin, isSubmitting = false }: LoginModalProps) {
+  const [usuario, setUsuario] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setUsuario("");
+    setPassword("");
+    setError(null);
+  }, [open]);
+
+  if (!open) return null;
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!usuario.trim() || !password || isSubmitting) return;
+
+    setError(null);
+    try {
+      await onLogin(usuario.trim(), password);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo iniciar sesión.");
+    }
+  };
+
+  return (
+    <div className="turismo-modal-overlay" onClick={onClose} role="presentation">
+      <div
+        className="turismo-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="login-title"
+      >
+        <div className="turismo-modal-header">
+          <h2 id="login-title">Iniciar sesión</h2>
+          <button type="button" className="turismo-modal-close" onClick={onClose} aria-label="Cerrar">
+            ×
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="turismo-form-field">
+            <label htmlFor="login-usuario">Usuario</label>
+            <input
+              id="login-usuario"
+              value={usuario}
+              onChange={(e) => setUsuario(e.target.value)}
+              placeholder="Ej. Administrador1001"
+              autoComplete="username"
+              required
+            />
+          </div>
+
+          <div className="turismo-form-field">
+            <label htmlFor="login-password">Contraseña</label>
+            <input
+              id="login-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Tu contraseña"
+              autoComplete="current-password"
+              required
+            />
+          </div>
+
+          <div className="turismo-form-actions">
+            <button type="button" className="turismo-form-btn" onClick={onClose} disabled={isSubmitting}>
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="turismo-form-btn turismo-form-btn--primary"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Ingresando..." : "Ingresar"}
+            </button>
+          </div>
+          {error ? <p className="turismo-form-error">{error}</p> : null}
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function PlaceDetail({
   place,
   onClose,
@@ -687,6 +804,66 @@ export const TurismoPage = () => {
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
+  const [themeColor, setThemeColor] = useState(DEFAULT_PRIMARY_COLOR);
+
+  const themeStyle = useMemo((): CSSProperties => {
+    const primary = themeColor;
+    return {
+      "--turismo-primary": primary,
+      "--turismo-primary-dark": darkenHex(primary),
+    } as CSSProperties;
+  }, [themeColor]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadThemeColor() {
+      try {
+        const colorHex = await obtenerColorTema();
+        if (!cancelled) setThemeColor(colorHex);
+      } catch {
+        // Mantiene el color por defecto.
+      }
+    }
+
+    void loadThemeColor();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restoreSession() {
+      const stored = getStoredSession();
+      if (!stored) {
+        if (!cancelled) setIsRestoringSession(false);
+        return;
+      }
+
+      try {
+        const session = await obtenerSesion(stored.token);
+        if (!cancelled) {
+          setAuthSession(session);
+          setThemeColor(session.colorHex);
+        }
+      } catch {
+        cerrarSesion();
+      } finally {
+        if (!cancelled) setIsRestoringSession(false);
+      }
+    }
+
+    void restoreSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -744,7 +921,7 @@ export const TurismoPage = () => {
   }, []);
 
   const handleStartPickMode = useCallback(() => {
-    if (!mapsKey) return;
+    if (!mapsKey || !authSession) return;
     if (pickMode) {
       cancelPickFlow();
       return;
@@ -752,7 +929,39 @@ export const TurismoPage = () => {
     setPickMode(true);
     setPendingCoords(null);
     setAddPlaceOpen(false);
-  }, [cancelPickFlow, mapsKey, pickMode]);
+  }, [cancelPickFlow, mapsKey, pickMode, authSession]);
+
+  const handleLogin = async (usuario: string, password: string) => {
+    setIsLoggingIn(true);
+    try {
+      const session = await iniciarSesion(usuario, password);
+      setAuthSession(session);
+      setThemeColor(session.colorHex);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = () => {
+    cerrarSesion();
+    setAuthSession(null);
+    cancelPickFlow();
+  };
+
+  const handleColorChange = async (colorHex: string) => {
+    if (!authSession) return;
+
+    setAuthSession((prev) => (prev ? { ...prev, colorHex } : null));
+    setThemeColor(colorHex);
+    try {
+      const saved = await actualizarColor(authSession.token, colorHex);
+      setAuthSession((prev) => (prev ? { ...prev, colorHex: saved } : null));
+      setThemeColor(saved);
+    } catch {
+      const stored = getStoredSession();
+      if (stored) setAuthSession(stored);
+    }
+  };
 
   const handleMapPick = useCallback((coords: MapCoords) => {
     setPendingCoords(coords);
@@ -807,7 +1016,7 @@ export const TurismoPage = () => {
   };
 
   const handleAddPlace = async (payload: CreatePlacePayload) => {
-    const created = await crearLugar(payload);
+    const created = await crearLugar(payload, authSession?.token);
     setPlaces((prev) => [created, ...prev]);
     setUserAddedIds((prev) => new Set(prev).add(created.id));
     setSelectedId(created.id);
@@ -829,7 +1038,7 @@ export const TurismoPage = () => {
   };
 
   return (
-    <div className="turismo-page">
+    <div className="turismo-page" style={themeStyle}>
       <header className="turismo-header">
         <div className="turismo-brand">
           <span className="turismo-brand-icon">T</span>
@@ -864,6 +1073,35 @@ export const TurismoPage = () => {
             </button>
           ))}
         </div>
+
+        <div className="turismo-header-auth">
+          {authSession ? (
+            <>
+              <label className="turismo-color-picker" title="Personalizar color de botones">
+                <span>Color</span>
+                <input
+                  type="color"
+                  value={authSession.colorHex}
+                  onChange={(e) => void handleColorChange(e.target.value)}
+                  aria-label="Elegir color de botones"
+                />
+              </label>
+              <span className="turismo-user-label">{authSession.usuario}</span>
+              <button type="button" className="turismo-auth-btn" onClick={handleLogout}>
+                Cerrar sesión
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="turismo-auth-btn turismo-auth-btn--primary"
+              onClick={() => setLoginOpen(true)}
+              disabled={isRestoringSession}
+            >
+              {isRestoringSession ? "..." : "Iniciar sesión"}
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="turismo-body">
@@ -875,15 +1113,17 @@ export const TurismoPage = () => {
                 <h1>{filteredPlaces.length} lugares turísticos</h1>
                 <p>Explora Machala y la provincia de El Oro</p>
               </div>
-              <button
-                type="button"
-                className={`turismo-add-btn${pickMode ? " turismo-add-btn--active" : ""}`}
-                onClick={handleStartPickMode}
-                disabled={!mapsKey}
-                title={!mapsKey ? "Se requiere Google Maps para agregar lugares" : undefined}
-              >
-                {pickMode ? "Cancelar selección" : "+ Agregar lugar"}
-              </button>
+              {authSession ? (
+                <button
+                  type="button"
+                  className={`turismo-add-btn${pickMode ? " turismo-add-btn--active" : ""}`}
+                  onClick={handleStartPickMode}
+                  disabled={!mapsKey}
+                  title={!mapsKey ? "Se requiere Google Maps para agregar lugares" : undefined}
+                >
+                  {pickMode ? "Cancelar selección" : "+ Agregar lugar"}
+                </button>
+              ) : null}
             </div>
             {pickMode ? (
               <p className="turismo-pick-hint">
@@ -989,6 +1229,13 @@ export const TurismoPage = () => {
         onClose={cancelPickFlow}
         onChangeLocation={handleChangeLocation}
         onSubmit={handleAddPlace}
+      />
+
+      <LoginModal
+        open={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onLogin={handleLogin}
+        isSubmitting={isLoggingIn}
       />
     </div>
   );

@@ -1,4 +1,7 @@
 .turismo-page {
+  --turismo-primary: #ff385c;
+  --turismo-primary-dark: #e61e4d;
+  --turismo-star: #f5a623;
   min-height: 100vh;
   background: #fff;
   color: #222;
@@ -31,7 +34,7 @@
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #ff385c 0%, #e61e4d 100%);
+  background: linear-gradient(135deg, var(--turismo-primary) 0%, var(--turismo-primary-dark) 100%);
   color: #fff;
   display: flex;
   align-items: center;
@@ -77,7 +80,7 @@
   height: 42px;
   border-radius: 50%;
   border: none;
-  background: #ff385c;
+  background: var(--turismo-primary);
   color: #fff;
   cursor: pointer;
   display: flex;
@@ -223,17 +226,17 @@
 }
 
 .turismo-add-btn--active {
-  background: #ff385c;
+  background: var(--turismo-primary);
 }
 
 .turismo-add-btn--active:hover {
-  background: #e61e4d;
+  background: var(--turismo-primary-dark);
 }
 
 .turismo-pick-hint {
   margin: 10px 0 0;
   font-size: 13px;
-  color: #ff385c;
+  color: var(--turismo-primary);
   font-weight: 600;
 }
 
@@ -249,7 +252,7 @@
 .turismo-card-badge--new {
   left: auto;
   right: 12px;
-  background: #ff385c;
+  background: var(--turismo-primary);
   color: #fff;
   text-transform: none;
   letter-spacing: 0;
@@ -322,13 +325,13 @@
 }
 
 .turismo-form-btn--primary {
-  background: #ff385c;
-  border-color: #ff385c;
+  background: var(--turismo-primary);
+  border-color: var(--turismo-primary);
   color: #fff;
 }
 
 .turismo-form-btn--primary:hover {
-  background: #e61e4d;
+  background: var(--turismo-primary-dark);
 }
 
 .turismo-star-picker {
@@ -347,7 +350,7 @@
 }
 
 .turismo-star-picker button.is-active {
-  color: #ff385c;
+  color: var(--turismo-star);
 }
 
 .turismo-modal-overlay {
@@ -427,7 +430,7 @@
   margin-left: auto;
   border: none;
   background: none;
-  color: #ff385c;
+  color: var(--turismo-primary);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -498,7 +501,7 @@
   margin-top: 4px;
   padding: 2px 8px;
   border-radius: 4px;
-  background: #ff385c;
+  background: var(--turismo-primary);
   color: #fff;
   font-size: 11px;
   font-weight: 600;
@@ -577,7 +580,7 @@
 }
 
 .turismo-card-rating svg {
-  color: #ff385c;
+  color: var(--turismo-star);
 }
 
 .turismo-card-meta {
@@ -667,13 +670,13 @@
 }
 
 .turismo-map-pin--pending .turismo-map-pin-label {
-  background: #ff385c;
+  background: var(--turismo-primary);
   color: #fff;
-  border-color: #ff385c;
+  border-color: var(--turismo-primary);
 }
 
 .turismo-map-pin--pending .turismo-map-pin-dot {
-  background: #ff385c;
+  background: var(--turismo-primary);
 }
 
 .turismo-map-pin--disabled {
@@ -942,4 +945,63 @@
   margin: 6px 0 0;
   color: #717171;
   font-size: 13px;
+}
+
+.turismo-header-auth {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.turismo-auth-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.turismo-auth-btn--primary {
+  background: var(--turismo-primary);
+  border-color: var(--turismo-primary);
+  color: #fff;
+}
+
+.turismo-auth-btn--primary:hover {
+  background: var(--turismo-primary-dark);
+  border-color: var(--turismo-primary-dark);
+}
+
+.turismo-user-label {
+  font-size: 13px;
+  color: #484848;
+  font-weight: 600;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.turismo-color-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #717171;
+  cursor: pointer;
+}
+
+.turismo-color-picker input[type="color"] {
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
 }
