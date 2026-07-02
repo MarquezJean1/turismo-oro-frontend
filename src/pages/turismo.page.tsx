@@ -610,7 +610,7 @@ function LoginModal({ open, onClose, onLogin, isSubmitting = false }: LoginModal
               id="login-usuario"
               value={usuario}
               onChange={(e) => setUsuario(e.target.value)}
-              placeholder="Ej. Administrador1001"
+              placeholder="Ej. Elian1997"
               autoComplete="username"
               required
             />
