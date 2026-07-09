@@ -18,16 +18,14 @@ import {
 } from "@/services/turismo.api";
 import {
   actualizarColor,
-  aprobarUsuario,
   cerrarSesion,
+  desactivarUsuario,
   getStoredSession,
   iniciarSesion,
   listarUsuariosActivos,
   listarUsuariosArchivados,
-  listarUsuariosPendientes,
   obtenerColorTema,
   obtenerSesion,
-  rechazarUsuario,
   registrarUsuario,
   setUsuarioAdministrador,
   type AuthSession,
@@ -911,7 +909,7 @@ function LoginModal({ open, onClose, onLogin, onRegister, isSubmitting = false }
   );
 }
 
-type UserControlTab = "activos" | "pendientes" | "archivados";
+type UserControlTab = "activos" | "archivados";
 
 type UserControlModalProps = {
   open: boolean;
@@ -923,7 +921,6 @@ type UserControlModalProps = {
 function UserControlModal({ open, token, currentUsername, onClose }: UserControlModalProps) {
   const [activeTab, setActiveTab] = useState<UserControlTab>("activos");
   const [activos, setActivos] = useState<UsuarioAdmin[]>([]);
-  const [pendientes, setPendientes] = useState<UsuarioAdmin[]>([]);
   const [archivados, setArchivados] = useState<UsuarioAdmin[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -933,13 +930,11 @@ function UserControlModal({ open, token, currentUsername, onClose }: UserControl
     setIsLoading(true);
     setError(null);
     try {
-      const [activosData, pendientesData, archivadosData] = await Promise.all([
+      const [activosData, archivadosData] = await Promise.all([
         listarUsuariosActivos(token),
-        listarUsuariosPendientes(token),
         listarUsuariosArchivados(token),
       ]);
       setActivos(activosData);
-      setPendientes(pendientesData);
       setArchivados(archivadosData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron cargar los usuarios.");
@@ -956,25 +951,16 @@ function UserControlModal({ open, token, currentUsername, onClose }: UserControl
 
   if (!open) return null;
 
-  const handleAprobar = async (id: string) => {
-    setActionId(id);
-    try {
-      await aprobarUsuario(token, id);
-      await loadLists();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo aprobar el usuario.");
-    } finally {
-      setActionId(null);
-    }
-  };
+  const handleDesactivar = async (usuario: UsuarioAdmin) => {
+    if (usuario.nombreUsuario === PRIMARY_ADMIN_USERNAME) return;
+    if (!window.confirm(`¿Eliminar al usuario "${usuario.nombreUsuario}"?`)) return;
 
-  const handleRechazar = async (id: string) => {
-    setActionId(id);
+    setActionId(usuario.id);
     try {
-      await rechazarUsuario(token, id);
+      await desactivarUsuario(token, usuario.id);
       await loadLists();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo rechazar el usuario.");
+      setError(err instanceof Error ? err.message : "No se pudo eliminar el usuario.");
     } finally {
       setActionId(null);
     }
@@ -996,7 +982,6 @@ function UserControlModal({ open, token, currentUsername, onClose }: UserControl
 
   const tabs: { id: UserControlTab; label: string; count: number }[] = [
     { id: "activos", label: "Usuarios activos", count: activos.length },
-    { id: "pendientes", label: "Usuarios pendientes", count: pendientes.length },
     { id: "archivados", label: "Usuarios archivados", count: archivados.length },
   ];
 
@@ -1052,53 +1037,29 @@ function UserControlModal({ open, token, currentUsername, onClose }: UserControl
                   ) : usuario.nombreUsuario === currentUsername ? (
                     <span className="turismo-user-you">Tú</span>
                   ) : (
-                    <button
-                      type="button"
-                      className="turismo-user-action-btn"
-                      disabled={actionId === usuario.id}
-                      onClick={() => void handleToggleAdmin(usuario)}
-                    >
-                      {actionId === usuario.id
-                        ? "..."
-                        : usuario.isAdministrador
-                          ? "Quitar admin"
-                          : "Hacer admin"}
-                    </button>
+                    <div className="turismo-user-actions">
+                      <button
+                        type="button"
+                        className="turismo-user-action-btn"
+                        disabled={actionId === usuario.id}
+                        onClick={() => void handleToggleAdmin(usuario)}
+                      >
+                        {actionId === usuario.id
+                          ? "..."
+                          : usuario.isAdministrador
+                            ? "Quitar admin"
+                            : "Hacer admin"}
+                      </button>
+                      <button
+                        type="button"
+                        className="turismo-user-action-btn turismo-user-action-btn--reject"
+                        disabled={actionId === usuario.id}
+                        onClick={() => void handleDesactivar(usuario)}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
                   )}
-                </div>
-              ))
-            ))}
-
-          {activeTab === "pendientes" &&
-            (pendientes.length === 0 ? (
-              <p className="turismo-user-empty">No hay usuarios pendientes.</p>
-            ) : (
-              pendientes.map((usuario) => (
-                <div key={usuario.id} className="turismo-user-row">
-                  <div className="turismo-user-info">
-                    <span className="turismo-user-name">{usuario.nombreUsuario}</span>
-                    <span className="turismo-user-meta">
-                      Registrado: {new Date(usuario.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="turismo-user-actions">
-                    <button
-                      type="button"
-                      className="turismo-user-action-btn turismo-user-action-btn--approve"
-                      disabled={actionId === usuario.id}
-                      onClick={() => void handleAprobar(usuario.id)}
-                    >
-                      Aprobar
-                    </button>
-                    <button
-                      type="button"
-                      className="turismo-user-action-btn turismo-user-action-btn--reject"
-                      disabled={actionId === usuario.id}
-                      onClick={() => void handleRechazar(usuario.id)}
-                    >
-                      Rechazar
-                    </button>
-                  </div>
                 </div>
               ))
             ))}
@@ -1111,11 +1072,7 @@ function UserControlModal({ open, token, currentUsername, onClose }: UserControl
                 <div key={usuario.id} className="turismo-user-row">
                   <div className="turismo-user-info">
                     <span className="turismo-user-name">{usuario.nombreUsuario}</span>
-                    <span className="turismo-user-meta">
-                      {!usuario.active ? "Inactivo" : null}
-                      {!usuario.active && usuario.enumAprobacion === "Rechazado" ? " · " : null}
-                      {usuario.enumAprobacion === "Rechazado" ? "Rechazado" : null}
-                    </span>
+                    <span className="turismo-user-meta">Inactivo</span>
                   </div>
                 </div>
               ))

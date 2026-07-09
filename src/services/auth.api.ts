@@ -104,7 +104,7 @@ export async function registrarUsuario(usuario: string, password: string): Promi
   }
 
   const data = (await response.json()) as { mensaje?: string };
-  return data.mensaje ?? "Registro exitoso. Su cuenta quedará pendiente de aprobación.";
+  return data.mensaje ?? "Registro exitoso. Ya puedes iniciar sesión.";
 }
 
 export async function obtenerSesion(token: string): Promise<AuthSession> {
@@ -174,20 +174,12 @@ export async function listarUsuariosActivos(token: string): Promise<UsuarioAdmin
   return authFetch<UsuarioAdmin[]>(token, "/api/usuarios/activos");
 }
 
-export async function listarUsuariosPendientes(token: string): Promise<UsuarioAdmin[]> {
-  return authFetch<UsuarioAdmin[]>(token, "/api/usuarios/pendientes");
-}
-
 export async function listarUsuariosArchivados(token: string): Promise<UsuarioAdmin[]> {
   return authFetch<UsuarioAdmin[]>(token, "/api/usuarios/archivados");
 }
 
-export async function aprobarUsuario(token: string, id: string): Promise<UsuarioAdmin> {
-  return authFetch<UsuarioAdmin>(token, `/api/usuarios/${id}/aprobar`, { method: "PUT" });
-}
-
-export async function rechazarUsuario(token: string, id: string): Promise<UsuarioAdmin> {
-  return authFetch<UsuarioAdmin>(token, `/api/usuarios/${id}/rechazar`, { method: "PUT" });
+export async function desactivarUsuario(token: string, id: string): Promise<UsuarioAdmin> {
+  return authFetch<UsuarioAdmin>(token, `/api/usuarios/${id}/desactivar`, { method: "PUT" });
 }
 
 export async function setUsuarioAdministrador(
