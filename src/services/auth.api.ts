@@ -7,6 +7,16 @@ export type AuthSession = {
   expiresAt: string;
   usuario: string;
   colorHex: string;
+  isAdministrador: boolean;
+};
+
+export type UsuarioAdmin = {
+  id: string;
+  nombreUsuario: string;
+  isAdministrador: boolean;
+  active: boolean;
+  enumAprobacion: string;
+  createdAt: string;
 };
 
 type ApiError = { mensaje?: string; message?: string };
@@ -25,6 +35,8 @@ export function getStoredSession(): AuthSession | null {
 
     const session = JSON.parse(raw) as AuthSession;
     if (!session.token || !session.expiresAt) return null;
+
+    session.isAdministrador = session.isAdministrador ?? false;
 
     if (new Date(session.expiresAt).getTime() <= Date.now()) {
       clearStoredSession();
@@ -72,8 +84,27 @@ export async function iniciarSesion(usuario: string, password: string): Promise<
   }
 
   const data = (await response.json()) as AuthSession;
-  storeSession(data);
-  return data;
+  const session: AuthSession = {
+    ...data,
+    isAdministrador: data.isAdministrador ?? false,
+  };
+  storeSession(session);
+  return session;
+}
+
+export async function registrarUsuario(usuario: string, password: string): Promise<string> {
+  const response = await fetch(`${API_BASE}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ usuario, password }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response, "No se pudo registrar el usuario."));
+  }
+
+  const data = (await response.json()) as { mensaje?: string };
+  return data.mensaje ?? "Registro exitoso. Su cuenta quedará pendiente de aprobación.";
 }
 
 export async function obtenerSesion(token: string): Promise<AuthSession> {
@@ -86,8 +117,12 @@ export async function obtenerSesion(token: string): Promise<AuthSession> {
   }
 
   const data = (await response.json()) as AuthSession;
-  storeSession(data);
-  return data;
+  const session: AuthSession = {
+    ...data,
+    isAdministrador: data.isAdministrador ?? false,
+  };
+  storeSession(session);
+  return session;
 }
 
 export async function actualizarColor(token: string, colorHex: string): Promise<string> {
@@ -115,4 +150,53 @@ export async function actualizarColor(token: string, colorHex: string): Promise<
 
 export function cerrarSesion(): void {
   clearStoredSession();
+}
+
+async function authFetch<T>(token: string, path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...(options.headers ?? {}),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response, "No se pudo completar la operación."));
+  }
+
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
+export async function listarUsuariosActivos(token: string): Promise<UsuarioAdmin[]> {
+  return authFetch<UsuarioAdmin[]>(token, "/api/usuarios/activos");
+}
+
+export async function listarUsuariosPendientes(token: string): Promise<UsuarioAdmin[]> {
+  return authFetch<UsuarioAdmin[]>(token, "/api/usuarios/pendientes");
+}
+
+export async function listarUsuariosArchivados(token: string): Promise<UsuarioAdmin[]> {
+  return authFetch<UsuarioAdmin[]>(token, "/api/usuarios/archivados");
+}
+
+export async function aprobarUsuario(token: string, id: string): Promise<UsuarioAdmin> {
+  return authFetch<UsuarioAdmin>(token, `/api/usuarios/${id}/aprobar`, { method: "PUT" });
+}
+
+export async function rechazarUsuario(token: string, id: string): Promise<UsuarioAdmin> {
+  return authFetch<UsuarioAdmin>(token, `/api/usuarios/${id}/rechazar`, { method: "PUT" });
+}
+
+export async function setUsuarioAdministrador(
+  token: string,
+  id: string,
+  isAdministrador: boolean,
+): Promise<UsuarioAdmin> {
+  return authFetch<UsuarioAdmin>(token, `/api/usuarios/${id}/administrador`, {
+    method: "PUT",
+    body: JSON.stringify({ isAdministrador }),
+  });
 }

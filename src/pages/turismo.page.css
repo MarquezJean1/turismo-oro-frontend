@@ -2,7 +2,9 @@
   --turismo-primary: #ff385c;
   --turismo-primary-dark: #e61e4d;
   --turismo-star: #f5a623;
-  min-height: 100vh;
+  --turismo-header-offset: 73px;
+  height: 100vh;
+  overflow: hidden;
   background: #fff;
   color: #222;
   font-family: "Circular", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -127,12 +129,13 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .turismo-detail-panel {
-  position: absolute;
+  position: fixed;
   left: calc(min(380px, 30vw) + 16px);
-  top: 16px;
+  top: calc(var(--turismo-header-offset) + 16px);
   bottom: 16px;
   width: min(340px, 30vw);
   max-width: 360px;
@@ -140,9 +143,10 @@
   border: 1px solid #ebebeb;
   border-radius: 10px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
-  z-index: 15;
+  z-index: 25;
   overflow: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 @media (max-width: 960px) {
@@ -1082,4 +1086,202 @@
   border-radius: 8px;
   background: #fff;
   cursor: pointer;
+}
+
+.turismo-auth-btn--admin {
+  background: #222;
+  border-color: #222;
+  color: #fff;
+}
+
+.turismo-auth-btn--admin:hover {
+  background: #000;
+  border-color: #000;
+}
+
+.turismo-auth-switch {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: #717171;
+}
+
+.turismo-auth-switch-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--turismo-primary);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.turismo-password-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.turismo-password-input input {
+  width: 100%;
+  padding-right: 64px;
+}
+
+.turismo-password-toggle {
+  position: absolute;
+  right: 8px;
+  border: none;
+  background: none;
+  padding: 4px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #717171;
+  cursor: pointer;
+}
+
+.turismo-password-toggle:hover {
+  color: #222;
+}
+
+.turismo-form-success {
+  margin-top: 12px;
+  color: #008a05;
+  font-size: 14px;
+}
+
+.turismo-modal--wide {
+  max-width: 640px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.turismo-user-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.turismo-user-tab {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #f7f7f7;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.turismo-user-tab--active {
+  background: var(--turismo-primary);
+  border-color: var(--turismo-primary);
+  color: #fff;
+}
+
+.turismo-user-list {
+  flex: 1;
+  min-height: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid #ebebeb;
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.turismo-user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.turismo-user-row:last-child {
+  border-bottom: none;
+}
+
+.turismo-user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.turismo-user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #222;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.turismo-user-meta {
+  font-size: 12px;
+  color: #717171;
+}
+
+.turismo-user-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #008a05;
+  background: #e8f5e9;
+  padding: 2px 8px;
+  border-radius: 999px;
+  width: fit-content;
+}
+
+.turismo-user-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.turismo-user-action-btn {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.turismo-user-action-btn--approve {
+  background: var(--turismo-primary);
+  border-color: var(--turismo-primary);
+  color: #fff;
+}
+
+.turismo-user-action-btn--reject {
+  color: #c13515;
+  border-color: #f5c6c0;
+}
+
+.turismo-user-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.turismo-user-you {
+  font-size: 12px;
+  color: #717171;
+  font-weight: 600;
+}
+
+.turismo-user-empty,
+.turismo-user-loading {
+  padding: 24px 12px;
+  text-align: center;
+  color: #717171;
+  font-size: 14px;
 }

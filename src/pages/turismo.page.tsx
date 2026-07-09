@@ -18,12 +18,20 @@ import {
 } from "@/services/turismo.api";
 import {
   actualizarColor,
+  aprobarUsuario,
   cerrarSesion,
   getStoredSession,
   iniciarSesion,
+  listarUsuariosActivos,
+  listarUsuariosArchivados,
+  listarUsuariosPendientes,
   obtenerColorTema,
   obtenerSesion,
+  rechazarUsuario,
+  registrarUsuario,
+  setUsuarioAdministrador,
   type AuthSession,
+  type UsuarioAdmin,
 } from "@/services/auth.api";
 import {
   AdvancedMarker,
@@ -35,6 +43,7 @@ import { ElOroProvinceBoundary } from "@/components/turismo-province-boundary";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from "react";
 
 const DEFAULT_PRIMARY_COLOR = "#ff385c";
+const PRIMARY_ADMIN_USERNAME = "Administrador1001";
 
 function getCoverPhoto(place: TurismoPlace) {
   return place.photos[0]?.url ?? DEFAULT_PHOTO;
@@ -755,20 +764,36 @@ type LoginModalProps = {
   open: boolean;
   onClose: () => void;
   onLogin: (usuario: string, password: string) => Promise<void>;
+  onRegister: (usuario: string, password: string) => Promise<string>;
   isSubmitting?: boolean;
 };
 
-function LoginModal({ open, onClose, onLogin, isSubmitting = false }: LoginModalProps) {
+function LoginModal({ open, onClose, onLogin, onRegister, isSubmitting = false }: LoginModalProps) {
+  const [mode, setMode] = useState<"login" | "register">("login");
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    setMode("login");
     setUsuario("");
     setPassword("");
+    setShowPassword(false);
     setError(null);
+    setSuccess(null);
   }, [open]);
+
+  const switchMode = (nextMode: "login" | "register", options?: { keepSuccess?: boolean }) => {
+    setMode(nextMode);
+    setUsuario("");
+    setPassword("");
+    setShowPassword(false);
+    setError(null);
+    if (!options?.keepSuccess) setSuccess(null);
+  };
 
   if (!open) return null;
 
@@ -777,11 +802,18 @@ function LoginModal({ open, onClose, onLogin, isSubmitting = false }: LoginModal
     if (!usuario.trim() || !password || isSubmitting) return;
 
     setError(null);
+    setSuccess(null);
     try {
-      await onLogin(usuario.trim(), password);
-      onClose();
+      if (mode === "login") {
+        await onLogin(usuario.trim(), password);
+        onClose();
+      } else {
+        const message = await onRegister(usuario.trim(), password);
+        setSuccess(message);
+        switchMode("login", { keepSuccess: true });
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo iniciar sesión.");
+      setError(err instanceof Error ? err.message : "No se pudo completar la operación.");
     }
   };
 
@@ -795,7 +827,7 @@ function LoginModal({ open, onClose, onLogin, isSubmitting = false }: LoginModal
         aria-labelledby="login-title"
       >
         <div className="turismo-modal-header">
-          <h2 id="login-title">Iniciar sesión</h2>
+          <h2 id="login-title">{mode === "login" ? "Iniciar sesión" : "Registrarse"}</h2>
           <button type="button" className="turismo-modal-close" onClick={onClose} aria-label="Cerrar">
             ×
           </button>
@@ -816,16 +848,42 @@ function LoginModal({ open, onClose, onLogin, isSubmitting = false }: LoginModal
 
           <div className="turismo-form-field">
             <label htmlFor="login-password">Contraseña</label>
-            <input
-              id="login-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Tu contraseña"
-              autoComplete="current-password"
-              required
-            />
+            <div className="turismo-password-input">
+              <input
+                id="login-password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Tu contraseña"
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                required
+              />
+              <button
+                type="button"
+                className="turismo-password-toggle"
+                onClick={() => setShowPassword((prev) => !prev)}
+                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              >
+                {showPassword ? "Ocultar" : "Ver"}
+              </button>
+            </div>
           </div>
+
+          {mode === "login" ? (
+            <p className="turismo-auth-switch">
+              ¿No tienes cuenta?{" "}
+              <button type="button" className="turismo-auth-switch-btn" onClick={() => switchMode("register")}>
+                Registrarse
+              </button>
+            </p>
+          ) : (
+            <p className="turismo-auth-switch">
+              ¿Ya tienes cuenta?{" "}
+              <button type="button" className="turismo-auth-switch-btn" onClick={() => switchMode("login")}>
+                Iniciar sesión
+              </button>
+            </p>
+          )}
 
           <div className="turismo-form-actions">
             <button type="button" className="turismo-form-btn" onClick={onClose} disabled={isSubmitting}>
@@ -836,11 +894,233 @@ function LoginModal({ open, onClose, onLogin, isSubmitting = false }: LoginModal
               className="turismo-form-btn turismo-form-btn--primary"
               disabled={isSubmitting}
             >
-              {isSubmitting ? "Ingresando..." : "Ingresar"}
+              {isSubmitting
+                ? mode === "login"
+                  ? "Ingresando..."
+                  : "Guardando..."
+                : mode === "login"
+                  ? "Ingresar"
+                  : "Guardar"}
             </button>
           </div>
           {error ? <p className="turismo-form-error">{error}</p> : null}
+          {success ? <p className="turismo-form-success">{success}</p> : null}
         </form>
+      </div>
+    </div>
+  );
+}
+
+type UserControlTab = "activos" | "pendientes" | "archivados";
+
+type UserControlModalProps = {
+  open: boolean;
+  token: string;
+  currentUsername?: string;
+  onClose: () => void;
+};
+
+function UserControlModal({ open, token, currentUsername, onClose }: UserControlModalProps) {
+  const [activeTab, setActiveTab] = useState<UserControlTab>("activos");
+  const [activos, setActivos] = useState<UsuarioAdmin[]>([]);
+  const [pendientes, setPendientes] = useState<UsuarioAdmin[]>([]);
+  const [archivados, setArchivados] = useState<UsuarioAdmin[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
+
+  const loadLists = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [activosData, pendientesData, archivadosData] = await Promise.all([
+        listarUsuariosActivos(token),
+        listarUsuariosPendientes(token),
+        listarUsuariosArchivados(token),
+      ]);
+      setActivos(activosData);
+      setPendientes(pendientesData);
+      setArchivados(archivadosData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudieron cargar los usuarios.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!open) return;
+    setActiveTab("activos");
+    void loadLists();
+  }, [open, loadLists]);
+
+  if (!open) return null;
+
+  const handleAprobar = async (id: string) => {
+    setActionId(id);
+    try {
+      await aprobarUsuario(token, id);
+      await loadLists();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo aprobar el usuario.");
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleRechazar = async (id: string) => {
+    setActionId(id);
+    try {
+      await rechazarUsuario(token, id);
+      await loadLists();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo rechazar el usuario.");
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleToggleAdmin = async (usuario: UsuarioAdmin) => {
+    if (usuario.nombreUsuario === PRIMARY_ADMIN_USERNAME && usuario.isAdministrador) return;
+    if (usuario.nombreUsuario === currentUsername && usuario.isAdministrador) return;
+    setActionId(usuario.id);
+    try {
+      await setUsuarioAdministrador(token, usuario.id, !usuario.isAdministrador);
+      await loadLists();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo actualizar el rol.");
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const tabs: { id: UserControlTab; label: string; count: number }[] = [
+    { id: "activos", label: "Usuarios activos", count: activos.length },
+    { id: "pendientes", label: "Usuarios pendientes", count: pendientes.length },
+    { id: "archivados", label: "Usuarios archivados", count: archivados.length },
+  ];
+
+  return (
+    <div className="turismo-modal-overlay" onClick={onClose} role="presentation">
+      <div
+        className="turismo-modal turismo-modal--wide"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="user-control-title"
+      >
+        <div className="turismo-modal-header">
+          <h2 id="user-control-title">Control de usuarios</h2>
+          <button type="button" className="turismo-modal-close" onClick={onClose} aria-label="Cerrar">
+            ×
+          </button>
+        </div>
+
+        <div className="turismo-user-tabs" role="tablist">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              className={`turismo-user-tab${activeTab === tab.id ? " turismo-user-tab--active" : ""}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label} ({tab.count})
+            </button>
+          ))}
+        </div>
+
+        {isLoading ? <p className="turismo-user-loading">Cargando usuarios...</p> : null}
+        {error ? <p className="turismo-form-error">{error}</p> : null}
+
+        <div className="turismo-user-list" role="tabpanel">
+          {activeTab === "activos" &&
+            (activos.length === 0 ? (
+              <p className="turismo-user-empty">No hay usuarios activos.</p>
+            ) : (
+              activos.map((usuario) => (
+                <div key={usuario.id} className="turismo-user-row">
+                  <div className="turismo-user-info">
+                    <span className="turismo-user-name">{usuario.nombreUsuario}</span>
+                    {usuario.isAdministrador ? (
+                      <span className="turismo-user-badge">Administrador</span>
+                    ) : null}
+                  </div>
+                  {usuario.nombreUsuario === PRIMARY_ADMIN_USERNAME ? (
+                    <span className="turismo-user-you">Principal</span>
+                  ) : usuario.nombreUsuario === currentUsername ? (
+                    <span className="turismo-user-you">Tú</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="turismo-user-action-btn"
+                      disabled={actionId === usuario.id}
+                      onClick={() => void handleToggleAdmin(usuario)}
+                    >
+                      {actionId === usuario.id
+                        ? "..."
+                        : usuario.isAdministrador
+                          ? "Quitar admin"
+                          : "Hacer admin"}
+                    </button>
+                  )}
+                </div>
+              ))
+            ))}
+
+          {activeTab === "pendientes" &&
+            (pendientes.length === 0 ? (
+              <p className="turismo-user-empty">No hay usuarios pendientes.</p>
+            ) : (
+              pendientes.map((usuario) => (
+                <div key={usuario.id} className="turismo-user-row">
+                  <div className="turismo-user-info">
+                    <span className="turismo-user-name">{usuario.nombreUsuario}</span>
+                    <span className="turismo-user-meta">
+                      Registrado: {new Date(usuario.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="turismo-user-actions">
+                    <button
+                      type="button"
+                      className="turismo-user-action-btn turismo-user-action-btn--approve"
+                      disabled={actionId === usuario.id}
+                      onClick={() => void handleAprobar(usuario.id)}
+                    >
+                      Aprobar
+                    </button>
+                    <button
+                      type="button"
+                      className="turismo-user-action-btn turismo-user-action-btn--reject"
+                      disabled={actionId === usuario.id}
+                      onClick={() => void handleRechazar(usuario.id)}
+                    >
+                      Rechazar
+                    </button>
+                  </div>
+                </div>
+              ))
+            ))}
+
+          {activeTab === "archivados" &&
+            (archivados.length === 0 ? (
+              <p className="turismo-user-empty">No hay usuarios archivados.</p>
+            ) : (
+              archivados.map((usuario) => (
+                <div key={usuario.id} className="turismo-user-row">
+                  <div className="turismo-user-info">
+                    <span className="turismo-user-name">{usuario.nombreUsuario}</span>
+                    <span className="turismo-user-meta">
+                      {!usuario.active ? "Inactivo" : null}
+                      {!usuario.active && usuario.enumAprobacion === "Rechazado" ? " · " : null}
+                      {usuario.enumAprobacion === "Rechazado" ? "Rechazado" : null}
+                    </span>
+                  </div>
+                </div>
+              ))
+            ))}
+        </div>
       </div>
     </div>
   );
@@ -1070,6 +1350,7 @@ export const TurismoPage = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [userControlOpen, setUserControlOpen] = useState(false);
   const [editPlace, setEditPlace] = useState<TurismoPlace | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isRestoringSession, setIsRestoringSession] = useState(true);
@@ -1202,6 +1483,15 @@ export const TurismoPage = () => {
       const session = await iniciarSesion(usuario, password);
       setAuthSession(session);
       setThemeColor(session.colorHex);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleRegister = async (usuario: string, password: string) => {
+    setIsLoggingIn(true);
+    try {
+      return await registrarUsuario(usuario, password);
     } finally {
       setIsLoggingIn(false);
     }
@@ -1362,15 +1652,26 @@ export const TurismoPage = () => {
         <div className="turismo-header-auth">
           {authSession ? (
             <>
-              <label className="turismo-color-picker" title="Personalizar color de botones">
-                <span>Color</span>
-                <input
-                  type="color"
-                  value={authSession.colorHex}
-                  onChange={(e) => void handleColorChange(e.target.value)}
-                  aria-label="Elegir color de botones"
-                />
-              </label>
+              {authSession.isAdministrador ? (
+                <>
+                  <label className="turismo-color-picker" title="Personalizar color de botones">
+                    <span>Color</span>
+                    <input
+                      type="color"
+                      value={authSession.colorHex}
+                      onChange={(e) => void handleColorChange(e.target.value)}
+                      aria-label="Elegir color de botones"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="turismo-auth-btn turismo-auth-btn--admin"
+                    onClick={() => setUserControlOpen(true)}
+                  >
+                    Control Usuario
+                  </button>
+                </>
+              ) : null}
               <span className="turismo-user-label">{authSession.usuario}</span>
               <button type="button" className="turismo-auth-btn" onClick={handleLogout}>
                 Cerrar sesión
@@ -1454,7 +1755,7 @@ export const TurismoPage = () => {
         </div>
 
         {selectedPlace && filteredPlaces.some((p) => p.id === selectedPlace.id) ? (
-          <div className="turismo-detail-panel">
+          <div key={selectedPlace.id} className="turismo-detail-panel">
             <PlaceDetail
               place={selectedPlace}
               onClose={handleCloseDetail}
@@ -1531,8 +1832,18 @@ export const TurismoPage = () => {
         open={loginOpen}
         onClose={() => setLoginOpen(false)}
         onLogin={handleLogin}
+        onRegister={handleRegister}
         isSubmitting={isLoggingIn}
       />
+
+      {authSession?.isAdministrador ? (
+        <UserControlModal
+          open={userControlOpen}
+          token={authSession.token}
+          currentUsername={authSession.usuario}
+          onClose={() => setUserControlOpen(false)}
+        />
+      ) : null}
     </div>
   );
 };
